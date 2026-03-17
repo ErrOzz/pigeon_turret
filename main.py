@@ -4,7 +4,8 @@ from ultralytics import YOLO
 # Constants
 MODEL_NAME = 'yolov8n.pt'
 BIRD_CLASS_ID = 14 # Bird ID in the COCO dataset
-CONFIDENCE_THRESHOLD = 0.5 # Confidence threshold (50%)
+CONFIDENCE_THRESHOLD = 0.35 # Confidence threshold (35%)
+IMG_SIZE = 800 # Image size for YOLO inference (800x800)
 
 def calculate_target_center(x1, y1, x2, y2):
     """Calculates the center of the bounding box (target)."""
@@ -16,6 +17,11 @@ def main():
     
     print("[INFO] Connecting to the camera...")
     cap = cv2.VideoCapture(0)
+
+    # Request a higher resolution from the webcam (e.g., 1080p)
+    # If the camera doesn't support 1920x1080, OpenCV will choose the closest highest resolution
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     
     if not cap.isOpened():
         print("[ERROR] Failed to open the camera!")
@@ -36,7 +42,7 @@ def main():
 
         # Object detection
         # Set classes=[BIRD_CLASS_ID] to detect only birds, ignoring other COCO objects
-        results = model(frame, classes=[BIRD_CLASS_ID], conf=CONFIDENCE_THRESHOLD, verbose=False)
+        results = model(frame, classes=[BIRD_CLASS_ID], conf=CONFIDENCE_THRESHOLD, imgsz=IMG_SIZE, verbose=False)
         
         # Plot bounding boxes on the frame
         annotated_frame = results[0].plot()
