@@ -7,8 +7,10 @@ VIDEO_PATH = 'pigeons_video.mp4'     # Change this for each new video
 OUTPUT_DIR = 'dataset/train/pigeon'  # Keep this the same to accumulate pigeon images
 BIRD_CLASS_ID = 14                   # COCO class ID for 'bird'
 CONFIDENCE_THRESHOLD = 0.5           # Minimum confidence to consider it a bird
-FRAME_SKIP = 45                      # Process every 45th frame
+FRAME_SKIP = 30                      # Process every 30th frame
 PADDING = 15                         # Extra pixels around the bird
+MIN_CROP_SIZE = 180                  # Ignore birds smaller than MIN_CROP_SIZE pixels
+MAX_IMAGES_PER_VIDEO = 300           # Stop processing this video after finding 300 good birds
 
 def create_directory(path):
     """Creates the output directory if it doesn't exist."""
@@ -27,12 +29,34 @@ def get_padded_crop(frame, x1, y1, x2, y2, padding):
     return frame[crop_y1:crop_y2, crop_x1:crop_x2]
 
 def get_starting_index(directory):
-    """Counts existing .jpg files to continue numbering without overwriting."""
+    """
+    Finds the highest index among existing files to continue numbering safely.
+    Prevents overwriting if files were manually deleted (creating gaps).
+    """
     if not os.path.exists(directory):
         return 0
+        
     existing_files =[f for f in os.listdir(directory) if f.endswith('.jpg')]
-    return len(existing_files)
-
+    if not existing_files:
+        return 0
+        
+    max_index = -1
+    for filename in existing_files:
+        try:
+            # Extract the number from strings like 'bird_crop_00123.jpg'
+            # Split by '_' -> ['bird', 'crop', '00123.jpg']
+            # Take the last element -> '00123.jpg'
+            # Split by '.' -> ['00123', 'jpg']
+            # Take the first element -> '00123' -> convert to integer
+            index_str = filename.split('_')[-1].split('.')[0]
+            index = int(index_str)
+            if index > max_index:
+                max_index = index
+        except (ValueError, IndexError):
+            # Ignore files that don't match the expected naming format
+            continue
+            
+    return max_index + 1
 def main():
     print("[INFO] Loading base YOLO model...")
     model = YOLO('yolov8n.pt')
@@ -76,13 +100,19 @@ def main():
             
             cropped_bird = get_padded_crop(frame, x1, y1, x2, y2, PADDING)
             
-            if cropped_bird.size == 0 or cropped_bird.shape[0] < 20 or cropped_bird.shape[1] < 20:
+            # 1. Size filter: Ignore tiny or empty crops
+            if cropped_bird.size == 0 or cropped_bird.shape[0] < MIN_CROP_SIZE or cropped_bird.shape[1] < MIN_CROP_SIZE:
                 continue
 
-            # Save the crop with the continuously incrementing index
+            # Save the crop
             filename = os.path.join(OUTPUT_DIR, f"bird_crop_{saved_images_count:05d}.jpg")
             cv2.imwrite(filename, cropped_bird)
             saved_images_count += 1
+
+            # 2. Limit filter: Stop early if we have enough images from this specific video
+            if saved_images_count >= MAX_IMAGES_PER_VIDEO:
+                 print(f"[INFO] Reached the limit of {MAX_IMAGES_PER_VIDEO} images for this run.")
+                 break # This breaks the FOR loop. You also need to break the WHILE loop below.
 
             cv2.rectangle(display_frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
