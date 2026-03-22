@@ -3,14 +3,14 @@ import os
 from ultralytics import YOLO
 
 # --- Configuration ---
-VIDEO_PATH = 'pigeons_video.mp4'     # Change this for each new video
-OUTPUT_DIR = 'dataset/train/pigeon'  # Keep this the same to accumulate pigeon images
+VIDEO_PATH = 'pigeons_video.mp4'     # Path to the current video
+OUTPUT_DIR = 'dataset/train/pigeon'  # Target folder ('pigeon' or 'other_birds')
 BIRD_CLASS_ID = 14                   # COCO class ID for 'bird'
-CONFIDENCE_THRESHOLD = 0.5           # Minimum confidence to consider it a bird
-FRAME_SKIP = 30                      # Process every 30th frame
+CONFIDENCE_THRESHOLD = 0.5           # Minimum confidence for detection
+FRAME_SKIP = 15                      # Process every 15th frame
 PADDING = 15                         # Extra pixels around the bird
-MIN_CROP_SIZE = 180                  # Ignore birds smaller than MIN_CROP_SIZE pixels
-MAX_IMAGES_PER_VIDEO = 300           # Stop processing this video after finding 300 good birds
+MIN_CROP_SIZE = 180                  # Ignore crops smaller than MIN_CROP_SIZE pixels
+MAX_IMAGES_PER_VIDEO = 300           # Stop after extracting this many images from the CURRENT video
 
 def create_directory(path):
     """Creates the output directory if it doesn't exist."""
@@ -31,7 +31,6 @@ def get_padded_crop(frame, x1, y1, x2, y2, padding):
 def get_starting_index(directory):
     """
     Finds the highest index among existing files to continue numbering safely.
-    Prevents overwriting if files were manually deleted (creating gaps).
     """
     if not os.path.exists(directory):
         return 0
@@ -43,40 +42,38 @@ def get_starting_index(directory):
     max_index = -1
     for filename in existing_files:
         try:
-            # Extract the number from strings like 'bird_crop_00123.jpg'
-            # Split by '_' -> ['bird', 'crop', '00123.jpg']
-            # Take the last element -> '00123.jpg'
-            # Split by '.' -> ['00123', 'jpg']
-            # Take the first element -> '00123' -> convert to integer
+            # Extract number from format 'bird_crop_XXXXX.jpg'
             index_str = filename.split('_')[-1].split('.')[0]
             index = int(index_str)
             if index > max_index:
                 max_index = index
         except (ValueError, IndexError):
-            # Ignore files that don't match the expected naming format
             continue
             
     return max_index + 1
+
 def main():
     print("[INFO] Loading base YOLO model...")
     model = YOLO('yolov8n.pt')
     
     create_directory(OUTPUT_DIR)
     
-    # Check how many images are already in the folder
-    saved_images_count = get_starting_index(OUTPUT_DIR)
-    print(f"[INFO] Found {saved_images_count} existing images. Resuming numbering.")
+    # 1. Global index for safe file naming
+    global_index = get_starting_index(OUTPUT_DIR)
+    print(f"[INFO] Next file will be named: bird_crop_{global_index:05d}.jpg")
     
     print(f"[INFO] Opening video file: {VIDEO_PATH}")
     cap = cv2.VideoCapture(VIDEO_PATH)
     
     if not cap.isOpened():
-        print(f"[ERROR] Could not open video {VIDEO_PATH}. Check the file path.")
+        print(f"[ERROR] Could not open video {VIDEO_PATH}.")
         return
 
     frame_count = 0
+    # 2. Session counter for the current video limit
+    session_count = 0
 
-    print("[INFO] Starting extraction. Press 'q' to stop early.")
+    print(f"[INFO] Starting extraction. Goal: {MAX_IMAGES_PER_VIDEO} images. Press 'q' to stop.")
 
     while True:
         ret, frame = cap.read()
@@ -86,13 +83,10 @@ def main():
 
         frame_count += 1
 
-        # Skip frames to ensure variety in the dataset
         if frame_count % FRAME_SKIP != 0:
             continue
 
-        # Detect birds in the current frame
         results = model(frame, classes=[BIRD_CLASS_ID], conf=CONFIDENCE_THRESHOLD, verbose=False)
-        
         display_frame = frame.copy()
 
         for box in results[0].boxes:
@@ -100,23 +94,29 @@ def main():
             
             cropped_bird = get_padded_crop(frame, x1, y1, x2, y2, PADDING)
             
-            # 1. Size filter: Ignore tiny or empty crops
+            # Filter out tiny or invalid crops
             if cropped_bird.size == 0 or cropped_bird.shape[0] < MIN_CROP_SIZE or cropped_bird.shape[1] < MIN_CROP_SIZE:
                 continue
 
-            # Save the crop
-            filename = os.path.join(OUTPUT_DIR, f"bird_crop_{saved_images_count:05d}.jpg")
+            # Save the file using the global index
+            filename = os.path.join(OUTPUT_DIR, f"bird_crop_{global_index:05d}.jpg")
             cv2.imwrite(filename, cropped_bird)
-            saved_images_count += 1
-
-            # 2. Limit filter: Stop early if we have enough images from this specific video
-            if saved_images_count >= MAX_IMAGES_PER_VIDEO:
-                 print(f"[INFO] Reached the limit of {MAX_IMAGES_PER_VIDEO} images for this run.")
-                 break # This breaks the FOR loop. You also need to break the WHILE loop below.
+            
+            # Increment both counters
+            global_index += 1
+            session_count += 1
 
             cv2.rectangle(display_frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
-        # Show the processing feed
+            # Check if we reached the limit for THIS video
+            if session_count >= MAX_IMAGES_PER_VIDEO:
+                break
+        
+        # If the limit was reached inside the FOR loop, break the WHILE loop too
+        if session_count >= MAX_IMAGES_PER_VIDEO:
+            print(f"[INFO] Reached the limit of {MAX_IMAGES_PER_VIDEO} images for this run.")
+            break
+
         display_resized = cv2.resize(display_frame, (1024, 576))
         cv2.imshow("Dataset Generator", display_resized)
 
@@ -126,7 +126,7 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"[INFO] Extraction complete! Total images in '{OUTPUT_DIR}' is now {saved_images_count}.")
+    print(f"[INFO] Extraction complete! Saved {session_count} images in this session.")
 
 if __name__ == "__main__":
     main()
