@@ -3,7 +3,7 @@ import os
 from ultralytics import YOLO
 
 # --- Configuration ---
-VIDEO_PATH = 'pigeons_video.mp4'     # Path to the current video
+VIDEO_PATH = 'video_to_process.mp4'  # Path to the current video
 OUTPUT_DIR = 'dataset/train/pigeon'  # Target folder ('pigeon' or 'other_birds')
 BIRD_CLASS_ID = 14                   # COCO class ID for 'bird'
 CONFIDENCE_THRESHOLD = 0.5           # Minimum confidence for detection
