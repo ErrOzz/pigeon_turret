@@ -15,7 +15,7 @@ top5_confs = results[0].probs.top5conf.tolist()
 
 print("\n--- TOP PREDICTIONS ---")
 for i in range(5):
-    class_id = top5_probs[i]
-    class_name = names[class_id]
-    confidence = top5_confs[i] * 100
-    print(f"{i+1}. {class_name}: {confidence:.1f}%")
+  class_id = top5_probs[i]
+  class_name = names[class_id]
+  confidence = top5_confs[i] * 100
+  print(f"{i+1}. {class_name}: {confidence:.1f}%")
