@@ -1,7 +1,7 @@
 import os
 
 # Configuration: Target directory to clean up
-DIRECTORY = 'dataset/train/tit'
+DIRECTORY = 'dataset/train/sparrow'  # Change this to your target directory
 
 def rename_files_sequentially():
   print(f"[INFO] Scanning directory: {DIRECTORY}")

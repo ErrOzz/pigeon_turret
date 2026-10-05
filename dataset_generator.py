@@ -5,7 +5,7 @@ from ultralytics import YOLO
 
 # --- Configuration ---
 VIDEO_PATH = 'video_to_process.mp4'  # Path to the current video
-OUTPUT_DIR = 'dataset/train/tit'     # Target folder
+OUTPUT_DIR = 'dataset/train/sparrow'     # Target folder
 BIRD_CLASS_ID = 14                   # COCO class ID for 'bird'
 CONFIDENCE_THRESHOLD = 0.5           # Minimum confidence for detection
 FRAME_SKIP = 30                      # Process every 30th frame
